@@ -60,13 +60,6 @@ It's built for privacy, so people who feel unsafe sharing their real location ha
 - **Developer Mode is visible** in Settings while it's on. To turn it off, go to Settings → Privacy & Security → Developer Mode.
 - **Games:** Don't use this with location-based games like Pokémon GO. Faking your location breaks their rules and can get your account banned. Close those apps before you change your location.
 
-## Staying safe
-
-If you're using this because you're afraid of someone tracking you, these may protect you better than a fake location:
-
-- **Safety Check** (Settings → Privacy & Security → Safety Check) shows exactly who can see your location and lets you remove access.
-- **Check for hidden access:** unknown devices on your Apple ID (Settings → your name), shared Apple ID passwords, AirTags (Find My → Items → Identify Found Item), and other apps that share location, like Life360, Snap Map and Google Maps.
-- **Talk to someone:** In the US, the National Domestic Violence Hotline (1-800-799-7233, or text START to 88788) helps with stalking and tech safety, including how to make changes without alerting the person. If you're in immediate danger, call 911 or your local emergency number.
 
 ## Troubleshooting
 
