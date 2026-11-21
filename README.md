@@ -19,7 +19,7 @@ It's built for privacy, so people who feel unsafe sharing their real location ha
 1. Install Homebrew if you don't have it. Paste the command from [brew.sh](https://brew.sh) into Terminal.
 2. Download this project. Click the green **Code** button on GitHub, choose **Download ZIP**, and unzip it. Or, if you use git:
    ```
-   git clone https://github.com/<your-username>/<repo-name>.git
+   git clone https://github.com/nicokoka/iphone-location-control.git
    ```
 3. Open Terminal in the project folder and run:
    ```
