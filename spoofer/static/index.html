@@ -7,66 +7,302 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   :root {
-    --bg: #f4f1ea; --panel: #fffdf8; --ink: #1d1b16; --muted: #6b665c;
-    --accent: #1f6f5c; --danger: #b2452f; --line: #ddd6c8;
+    --surface: #ffffff; --surface-2: #f3f4f6; --ink: #111827; --muted: #6b7280;
+    --line: #e5e7eb; --accent: #2563eb; --accent-ink: #ffffff;
+    --on: #16a34a; --danger: #dc2626;
+    --shadow: 0 2px 6px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.12);
+    --radius: 16px;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #15140f; --panel: #201e18; --ink: #f1ece0; --muted: #a39d8f;
-            --accent: #4fb89a; --danger: #e07a62; --line: #37342b; }
+    :root { --surface: #1f2023; --surface-2: #2a2b2f; --ink: #f3f4f6; --muted: #9ca3af;
+            --line: #34353a; --accent: #60a5fa; --accent-ink: #0b1220;
+            --on: #4ade80; --danger: #f87171;
+            --shadow: 0 2px 6px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.5); }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; height: 100vh; display: grid; grid-template-rows: auto 1fr;
-         background: var(--bg); color: var(--ink);
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--surface-2); color: var(--ink);
          font: 15px/1.4 -apple-system, "SF Pro Text", system-ui, sans-serif; }
-  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
-           padding: 14px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
-  h1 { font-size: 17px; margin: 0 auto 0 0; letter-spacing: -0.01em; }
-  #status { font-variant-numeric: tabular-nums; color: var(--muted); }
-  #status.on { color: var(--accent); font-weight: 600; }
-  #status.err { color: var(--danger); }
-  button { font: inherit; border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer;
-           background: var(--accent); color: #fff; transition: transform .1s, opacity .15s; }
-  button.secondary { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
-  button:hover { opacity: .9; } button:active { transform: scale(.97); }
-  button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-  button:disabled { opacity: .5; cursor: wait; }
-  #map { height: 100%; }
-  .hint { color: var(--muted); font-size: 13px; width: 100%; }
+  #map { position: fixed; inset: 0; }
+
+  /* Search */
+  .search { position: fixed; top: 16px; left: 16px; z-index: 1000;
+            width: min(420px, calc(100% - 32px)); }
+  .search-box { display: flex; align-items: center; gap: 10px; height: 50px; padding: 0 8px 0 16px;
+                background: var(--surface); border-radius: 25px; box-shadow: var(--shadow); }
+  .search-box:focus-within { outline: 2px solid var(--accent); }
+  .search-box svg { flex: none; color: var(--muted); }
+  #q { flex: 1; min-width: 0; border: 0; background: none; color: var(--ink);
+       font: inherit; font-size: 16px; outline: none; }
+  #q::placeholder { color: var(--muted); }
+  .icon-btn { flex: none; width: 36px; height: 36px; border: 0; border-radius: 50%;
+              background: none; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+  .icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+  .icon-btn[hidden] { display: none; }
+  #results { list-style: none; margin: 8px 0 0; padding: 6px; background: var(--surface);
+             border-radius: var(--radius); box-shadow: var(--shadow); max-height: 50vh; overflow-y: auto; }
+  #results[hidden] { display: none; }
+  #results li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px;
+                border-radius: 10px; cursor: pointer; }
+  #results li[aria-selected="true"], #results li:hover { background: var(--surface-2); }
+  #results li svg { flex: none; margin-top: 2px; color: var(--muted); }
+  .r-name { font-weight: 600; }
+  .r-detail { color: var(--muted); font-size: 13px; }
+  .r-empty { color: var(--muted); cursor: default !important; }
+
+  /* Bottom sheet */
+  .sheet { position: fixed; z-index: 1000; left: 16px; bottom: 16px;
+           width: min(420px, calc(100% - 32px)); padding: 16px;
+           background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
+           display: grid; gap: 14px; }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .status.on { color: var(--on); font-weight: 600; } .status.on .dot { background: var(--on);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--on) 25%, transparent); }
+  .status.err { color: var(--danger); } .status.err .dot { background: var(--danger); }
+  .picked-name { font-size: 18px; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
+  .picked-coords { margin: 2px 0 0; color: var(--muted); font-size: 13px;
+                   font-variant-numeric: tabular-nums; }
+  .actions { display: flex; gap: 8px; }
+  .btn { flex: 1; font: inherit; font-weight: 600; height: 44px; padding: 0 16px; border-radius: 22px;
+         border: 1px solid transparent; cursor: pointer; transition: transform .1s, opacity .15s; }
+  .btn:active { transform: scale(.97); }
+  .btn:focus-visible, .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); }
+  .btn-primary:hover:not(:disabled) { opacity: .92; }
+  .btn-ghost { background: none; color: var(--ink); border-color: var(--line); }
+  .btn-ghost:hover:not(:disabled) { background: var(--surface-2); }
+  .hint { margin: 0; color: var(--muted); font-size: 12px; }
+
+  @media (prefers-color-scheme: dark) {
+    /* OSM has no dark tiles; invert the light ones for a dark map. */
+    .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.9); }
+  }
+  .leaflet-control-zoom { border: 0 !important; box-shadow: var(--shadow) !important;
+                          border-radius: 12px !important; overflow: hidden; }
+  .leaflet-control-zoom a { background: var(--surface) !important; color: var(--ink) !important;
+                            border-color: var(--line) !important; }
+
+  @media (max-width: 600px) {
+    .sheet { left: 0; bottom: 0; width: 100%; border-radius: var(--radius) var(--radius) 0 0;
+             padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+    .leaflet-bottom.leaflet-right { bottom: 210px; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>Location Control</h1>
-  <span id="status" role="status" aria-live="polite">Checking…</span>
-  <button id="apply" disabled>Set phone here</button>
-  <button id="restore" class="secondary">Restore real location</button>
-  <p class="hint">Click the map to pick a spot, then press “Set phone here”. Keep this running — closing it or unplugging the phone brings your real location back.</p>
-</header>
-<main id="map" aria-label="Map"></main>
+<main id="map" aria-label="Map. Click to pick a location."></main>
+
+<div class="search" role="search">
+  <div class="search-box">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" type="search" autocomplete="off" spellcheck="false"
+           placeholder="Search a place or paste coordinates"
+           role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list"
+           aria-label="Search for a place">
+    <button id="clear-q" class="icon-btn" type="button" aria-label="Clear search" hidden>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <ul id="results" role="listbox" hidden></ul>
+</div>
+
+<section class="sheet" aria-label="Location controls">
+  <div id="status" class="status" role="status" aria-live="polite">
+    <span class="dot"></span><span id="status-text">Checking…</span>
+  </div>
+  <div>
+    <p id="picked-name" class="picked-name">No spot picked yet</p>
+    <p id="picked-coords" class="picked-coords">Search above or click anywhere on the map.</p>
+  </div>
+  <div class="actions">
+    <button id="apply" class="btn btn-primary" disabled>Set phone here</button>
+    <button id="restore" class="btn btn-ghost">Use real location</button>
+  </div>
+  <p class="hint">Keep this running — closing it or unplugging the phone brings your real location back.</p>
+</section>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  const statusEl = document.getElementById("status");
-  const applyBtn = document.getElementById("apply");
-  const restoreBtn = document.getElementById("restore");
-  const map = L.map("map").setView([40.7128, -74.006], 12);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
+  const NOMINATIM = "https://nominatim.openstreetmap.org";
+  const SEARCH_DEBOUNCE_MS = 400;
+  const STATUS_POLL_MS = 10000;
+  const PIN_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>';
+
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $("status"), statusText = $("status-text");
+  const applyBtn = $("apply"), restoreBtn = $("restore");
+  const qInput = $("q"), clearQ = $("clear-q"), resultsEl = $("results");
+  const pickedName = $("picked-name"), pickedCoords = $("picked-coords");
+
+  // ---------- Map ----------
+  const map = L.map("map", { zoomControl: false, worldCopyJump: true })
+    .setView([40.7128, -74.006], 12);
+  L.control.zoom({ position: "bottomright" }).addTo(map);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map);
 
   let picked = null;
   let marker = null;
+  let liveMarker = null;
 
+  const fmt = (n) => n.toFixed(5);
+
+  function pick(lat, lon, name) {
+    // Leaflet can report unwrapped longitudes (e.g. -250) across world copies.
+    const ll = L.latLng(lat, lon).wrap();
+    picked = { lat: ll.lat, lon: ll.lng };
+    if (marker) marker.setLatLng([lat, lon]); else marker = L.marker([lat, lon]).addTo(map);
+    pickedName.textContent = name || "Dropped pin";
+    pickedCoords.textContent = `${fmt(ll.lat)}, ${fmt(ll.lng)}`;
+    applyBtn.disabled = false;
+    if (!name) reverseLookup(ll.lat, ll.lng);
+  }
+
+  async function reverseLookup(lat, lon) {
+    try {
+      const res = await fetch(`${NOMINATIM}/reverse?format=jsonv2&zoom=16&lat=${lat}&lon=${lon}`);
+      const data = await res.json();
+      if (picked && picked.lat === lat && picked.lon === lon && data.display_name) {
+        pickedName.textContent = shortName(data);
+      }
+    } catch { /* name is cosmetic; coordinates are already shown */ }
+  }
+
+  map.on("click", (e) => { closeResults(); pick(e.latlng.lat, e.latlng.lng); });
+
+  // ---------- Search ----------
+  let searchTimer = null, searchAbort = null, results = [], active = -1;
+
+  function shortName(r) {
+    return r.name || (r.display_name || "").split(",")[0];
+  }
+
+  function parseCoords(text) {
+    const m = text.trim().match(/^(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)$/);
+    if (!m) return null;
+    const lat = parseFloat(m[1]), lon = parseFloat(m[2]);
+    return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
+  }
+
+  function renderResults(items, emptyText) {
+    results = items; active = items.length ? 0 : -1;
+    resultsEl.replaceChildren();
+    if (!items.length && emptyText) {
+      const li = document.createElement("li");
+      li.className = "r-empty"; li.textContent = emptyText;
+      resultsEl.append(li);
+    }
+    items.forEach((item, i) => {
+      const li = document.createElement("li");
+      li.id = `r-${i}`; li.setAttribute("role", "option");
+      li.innerHTML = PIN_SVG;
+      const text = document.createElement("div");
+      const name = document.createElement("div"); name.className = "r-name"; name.textContent = item.name;
+      const detail = document.createElement("div"); detail.className = "r-detail"; detail.textContent = item.detail;
+      text.append(name, detail); li.append(text);
+      li.addEventListener("mousedown", (e) => { e.preventDefault(); choose(i); });
+      resultsEl.append(li);
+    });
+    const open = resultsEl.children.length > 0;
+    resultsEl.hidden = !open;
+    qInput.setAttribute("aria-expanded", String(open));
+    highlight();
+  }
+
+  function highlight() {
+    [...resultsEl.children].forEach((li, i) => li.setAttribute("aria-selected", String(i === active)));
+    if (active >= 0) {
+      qInput.setAttribute("aria-activedescendant", `r-${active}`);
+      resultsEl.children[active].scrollIntoView({ block: "nearest" });
+    } else qInput.removeAttribute("aria-activedescendant");
+  }
+
+  function closeResults() { renderResults([]); }
+
+  function choose(i) {
+    const r = results[i];
+    if (!r) return;
+    qInput.value = r.name;
+    closeResults();
+    qInput.blur();
+    if (r.bbox) map.fitBounds(r.bbox, { maxZoom: 17 }); else map.setView([r.lat, r.lon], 16);
+    pick(r.lat, r.lon, r.name);
+  }
+
+  async function search(text) {
+    const coords = parseCoords(text);
+    if (coords) {
+      renderResults([{ ...coords, name: `${coords.lat}, ${coords.lon}`, detail: "Go to coordinates" }]);
+      return;
+    }
+    if (searchAbort) searchAbort.abort();
+    searchAbort = new AbortController();
+    try {
+      const res = await fetch(`${NOMINATIM}/search?format=jsonv2&limit=6&q=${encodeURIComponent(text)}`,
+                              { signal: searchAbort.signal });
+      const data = await res.json();
+      renderResults(data.map((r) => {
+        const [s, n, w, e] = (r.boundingbox || []).map(parseFloat);
+        return {
+          lat: parseFloat(r.lat), lon: parseFloat(r.lon),
+          name: shortName(r),
+          detail: r.display_name.split(",").slice(1).join(",").trim(),
+          bbox: r.boundingbox ? [[s, w], [n, e]] : null
+        };
+      }), "No places found");
+    } catch (err) {
+      if (err.name !== "AbortError") renderResults([], "Search is unavailable right now");
+    }
+  }
+
+  qInput.addEventListener("input", () => {
+    const text = qInput.value.trim();
+    clearQ.hidden = !qInput.value;
+    clearTimeout(searchTimer);
+    if (text.length < 2) { closeResults(); return; }
+    searchTimer = setTimeout(() => search(text), parseCoords(text) ? 0 : SEARCH_DEBOUNCE_MS);
+  });
+
+  qInput.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" && results.length) { active = (active + 1) % results.length; highlight(); e.preventDefault(); }
+    else if (e.key === "ArrowUp" && results.length) { active = (active - 1 + results.length) % results.length; highlight(); e.preventDefault(); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      if (active >= 0) choose(active);
+      else if (qInput.value.trim().length >= 2) { clearTimeout(searchTimer); search(qInput.value.trim()); }
+    }
+    else if (e.key === "Escape") closeResults();
+  });
+  qInput.addEventListener("blur", () => setTimeout(closeResults, 100));
+  clearQ.addEventListener("click", () => {
+    qInput.value = ""; clearQ.hidden = true; closeResults(); qInput.focus();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "/" && document.activeElement !== qInput) { e.preventDefault(); qInput.focus(); }
+  });
+
+  // ---------- Phone status ----------
   function showStatus(text, kind) {
-    statusEl.textContent = text;
-    statusEl.className = kind || "";
+    statusText.textContent = text;
+    statusEl.className = "status" + (kind ? " " + kind : "");
   }
 
   function render(data) {
     if (data.spoofing) {
-      showStatus(`Phone set to ${data.lat.toFixed(5)}, ${data.lon.toFixed(5)}`, "on");
+      showStatus(`Phone is at ${fmt(data.lat)}, ${fmt(data.lon)}`, "on");
+      const ll = [data.lat, data.lon];
+      if (liveMarker) liveMarker.setLatLng(ll);
+      else liveMarker = L.circleMarker(ll, { radius: 9, color: "#fff", weight: 3,
+                                             fillColor: "#16a34a", fillOpacity: 1 }).addTo(map);
     } else {
       showStatus("Phone is using its real location");
+      if (liveMarker) { liveMarker.remove(); liveMarker = null; }
     }
   }
 
@@ -82,30 +318,19 @@
     return json;
   }
 
-  map.on("click", (e) => {
-    picked = { lat: e.latlng.lat, lon: e.latlng.lng };
-    if (marker) marker.setLatLng(e.latlng); else marker = L.marker(e.latlng).addTo(map);
-    applyBtn.disabled = false;
-  });
-
-  async function withBusy(btn, fn) {
-    btn.disabled = true;
+  async function withBusy(btn, label, fn) {
+    const original = btn.textContent;
+    btn.disabled = true; btn.textContent = label;
     try { await fn(); }
     catch { showStatus("Can't reach the local server. Is run.sh still running?", "err"); }
-    finally { btn.disabled = btn === applyBtn ? !picked : false; }
+    finally { btn.textContent = original; btn.disabled = btn === applyBtn ? !picked : false; }
   }
 
-  applyBtn.addEventListener("click", () => withBusy(applyBtn, () => {
-    showStatus("Setting location…");
-    return call("/location", picked);
-  }));
-  restoreBtn.addEventListener("click", () => withBusy(restoreBtn, () => {
-    showStatus("Restoring…");
-    return call("/clear", {});
-  }));
+  applyBtn.addEventListener("click", () => withBusy(applyBtn, "Setting…", () => call("/location", picked)));
+  restoreBtn.addEventListener("click", () => withBusy(restoreBtn, "Restoring…", () => call("/clear", {})));
 
   call("/status").catch(() => showStatus("Can't reach the local server.", "err"));
-  setInterval(() => call("/status").catch(() => {}), 10000);
+  setInterval(() => call("/status").catch(() => {}), STATUS_POLL_MS);
 </script>
 </body>
 </html>
