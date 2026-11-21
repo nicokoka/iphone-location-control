@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Location Control</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --bg: #f4f1ea; --panel: #fffdf8; --ink: #1d1b16; --muted: #6b665c;
+    --accent: #1f6f5c; --danger: #b2452f; --line: #ddd6c8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15140f; --panel: #201e18; --ink: #f1ece0; --muted: #a39d8f;
+            --accent: #4fb89a; --danger: #e07a62; --line: #37342b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; height: 100vh; display: grid; grid-template-rows: auto 1fr;
+         background: var(--bg); color: var(--ink);
+         font: 15px/1.4 -apple-system, "SF Pro Text", system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+           padding: 14px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  h1 { font-size: 17px; margin: 0 auto 0 0; letter-spacing: -0.01em; }
+  #status { font-variant-numeric: tabular-nums; color: var(--muted); }
+  #status.on { color: var(--accent); font-weight: 600; }
+  #status.err { color: var(--danger); }
+  button { font: inherit; border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer;
+           background: var(--accent); color: #fff; transition: transform .1s, opacity .15s; }
+  button.secondary { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  button:hover { opacity: .9; } button:active { transform: scale(.97); }
+  button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  button:disabled { opacity: .5; cursor: wait; }
+  #map { height: 100%; }
+  .hint { color: var(--muted); font-size: 13px; width: 100%; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Location Control</h1>
+  <span id="status" role="status" aria-live="polite">Checking…</span>
+  <button id="apply" disabled>Set phone here</button>
+  <button id="restore" class="secondary">Restore real location</button>
+  <p class="hint">Click the map to pick a spot, then press “Set phone here”. Keep this running — closing it or unplugging the phone brings your real location back.</p>
+</header>
+<main id="map" aria-label="Map"></main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const statusEl = document.getElementById("status");
+  const applyBtn = document.getElementById("apply");
+  const restoreBtn = document.getElementById("restore");
+  const map = L.map("map").setView([40.7128, -74.006], 12);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
+  }).addTo(map);
+
+  let picked = null;
+  let marker = null;
+
+  function showStatus(text, kind) {
+    statusEl.textContent = text;
+    statusEl.className = kind || "";
+  }
+
+  function render(data) {
+    if (data.spoofing) {
+      showStatus(`Phone set to ${data.lat.toFixed(5)}, ${data.lon.toFixed(5)}`, "on");
+    } else {
+      showStatus("Phone is using its real location");
+    }
+  }
+
+  async function call(path, body) {
+    const res = await fetch(path, {
+      method: body ? "POST" : "GET",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined
+    });
+    const json = await res.json();
+    render(json.data);
+    if (!json.ok) showStatus(json.error, "err");
+    return json;
+  }
+
+  map.on("click", (e) => {
+    picked = { lat: e.latlng.lat, lon: e.latlng.lng };
+    if (marker) marker.setLatLng(e.latlng); else marker = L.marker(e.latlng).addTo(map);
+    applyBtn.disabled = false;
+  });
+
+  async function withBusy(btn, fn) {
+    btn.disabled = true;
+    try { await fn(); }
+    catch { showStatus("Can't reach the local server. Is run.sh still running?", "err"); }
+    finally { btn.disabled = btn === applyBtn ? !picked : false; }
+  }
+
+  applyBtn.addEventListener("click", () => withBusy(applyBtn, () => {
+    showStatus("Setting location…");
+    return call("/location", picked);
+  }));
+  restoreBtn.addEventListener("click", () => withBusy(restoreBtn, () => {
+    showStatus("Restoring…");
+    return call("/clear", {});
+  }));
+
+  call("/status").catch(() => showStatus("Can't reach the local server.", "err"));
+  setInterval(() => call("/status").catch(() => {}), 10000);
+</script>
+</body>
+</html>
